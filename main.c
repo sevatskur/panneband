@@ -9,7 +9,7 @@
 #define PIN_PWM (1 << 2)  // PB2 for vibration motor
 #define PERIOD 0x9c3      // pwm variable
 #define N 4 //For 2^N
-#define CIRCULAR_BUFFER_SIZE (1 << N) //Gir bufferstørrelse 2^N
+#define CIRCULAR_BUFFER_SIZE (1 << N) //Gir bufferstÃ¸rrelse 2^N
 
 typedef struct {
     int16_t * const buffer;
@@ -17,10 +17,10 @@ typedef struct {
 } circular_buffer_t;
 
 float calculate_distance(uint16_t adc_value);
-float map_to_pwm(uint16_t pwm_value);
 void circular_buffer_write(circular_buffer_t *c, int16_t data);
 int16_t circular_buffer_read(circular_buffer_t *c, unsigned Xn);
 int32_t accumolator(int16_t sample);
+uint8_t map_distance_to_duty_cycle(uint16_t distance);
 
 int main(void) {
     // Initial setup
@@ -35,13 +35,12 @@ int main(void) {
         float distance_cm = calculate_distance(adc_result_flat); // Kalkuler avstand
         printf("Distance: %.2f cm\r\n", distance_cm);
         
-        // Juster PWM duty cycle basert på avstand
-        uint16_t pwm_value = (distance_cm <= 100) ? (uint16_t)(distance_cm) : 100; // Avgrens til 100% PWM
-        float pwm_percent = map_to_pwm(pwm_value); // Sett PWM
+        uint8_t duty_cycle = map_distance_to_duty_cycle((uint16_t) distance_cm); // Map distance to duty cycle
+        TCA1.SINGLE.CMP2 = (PERIOD * duty_cycle) / 100;
 
         //printf("PWM Duty Cycle: %.2f \r\n", pwm_percent); // Skriv ut PWM-verdi
         
-        _delay_ms(100); // Kort forsinkelse for å unngå raske variasjoner
+        //_delay_ms(100); // Kort forsinkelse for Ã¥ unngÃ¥ raske variasjoner
     }
 }
 
@@ -60,7 +59,7 @@ int16_t circular_buffer_read(circular_buffer_t *c, unsigned Xn) {
 }
 
 int32_t accumolator(int16_t sample){
-    //Deklarerer en ringbuffer med dataområde gitt av CIRCULAR_BUFFER_SIZE
+    //Deklarerer en ringbuffer med dataomrÃ¥de gitt av CIRCULAR_BUFFER_SIZE
     static int16_t bufferDataSpace[CIRCULAR_BUFFER_SIZE];
     static circular_buffer_t c = {
         .buffer = bufferDataSpace,
@@ -73,11 +72,11 @@ int32_t accumolator(int16_t sample){
     static int16_t counter = 0;
     //Sjekker om ringbufferen har blitt lagt sammen en gang
     if(counter > CIRCULAR_BUFFER_SIZE){
-        //trekker fra edlste verdi og legger deretter på nyeste verdi
+        //trekker fra edlste verdi og legger deretter pÃ¥ nyeste verdi
         sum -= circular_buffer_read(&c, CIRCULAR_BUFFER_SIZE-1);
         sum += circular_buffer_read(&c, 0);
     }
-    //legger sammen alle verdiene i ringbufferen ved første gjennomkjøring
+    //legger sammen alle verdiene i ringbufferen ved fÃ¸rste gjennomkjÃ¸ring
     else{
         for(uint8_t n = 0; n < CIRCULAR_BUFFER_SIZE; n++) {
         sum += (int32_t) c.buffer[n];
@@ -93,17 +92,14 @@ float calculate_distance(uint16_t adc_value) {
     return distance;
 }
 
-float map_to_pwm(uint16_t pwm_value) {
+uint8_t map_distance_to_duty_cycle(uint16_t distance) {
+    uint16_t max_distance = 300; // chosen max distance
+    uint8_t duty_cycle = 100 - (distance * 100 / max_distance);
 
-    if (pwm_value > 100) {
-        pwm_value = 100;
-    }
+    // Corrected clamping for the duty cycle range
+    if (duty_cycle > 100) duty_cycle = 0;
+    else if (duty_cycle < 0) duty_cycle = 100;
 
-    uint16_t current_pwm_value = (PERIOD * pwm_value) / 100;
-
-    TCA1_Compare2Set(current_pwm_value); //sets pwm to channel 2
-
-    float pwm = (float) current_pwm_value / PERIOD * 100;
-
-    return pwm;
+    //printf("Duty_cycle: %u\r\n", duty_cycle);
+    return duty_cycle;
 }
