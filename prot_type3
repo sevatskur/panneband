@@ -8,16 +8,21 @@
 #define PIN_PW (1 << 0)   // PD0 for pw pin
 #define PIN_PW_1 (1 << 1) // PD1 for pw pin 
 #define PIN_PW_2 (1 << 2)
-#define PIN_PWM (1 << 2)  // PB2 for vibration motor
+#define PIN_PWM (1 << 0)  // PB0 for vibration motor
+#define PIN_PWM_1 (1 << 1)
+#define PIN_PWM_2 (1 << 2)
 #define PERIOD 0x9c3      // pwm variable
 #define N 4               // For 2^N
 #define CIRCULAR_BUFFER_SIZE (1 << N) //Gir bufferstørrelse 2^N
 
 uint16_t adc_result[3]; // array to store data for each sensor
-float adc_result_flat[3];
+float adc_result_flat[3]; //average adc values after being filtered
 float distance_cm[3]; // array for 3 different distances
 int adc_pins[3] = {ADC0_IO_PD0, ADC0_IO_PD1, ADC0_IO_PD2}; // Distance sensor pins
 uint8_t duty_cycle[3]; //distance to pwm array
+int sensor_logic(float distance_cm[3], int size); //sensor logic
+
+int size = 3; //for sensor logic
 
 typedef struct {
     int16_t * const buffer1; // buffer 1
@@ -41,23 +46,40 @@ int main(void) {
     PORTD.DIRCLR = PIN_PW; // input sensor 1
     PORTD.DIRCLR = PIN_PW_1; // input sensor 2
     PORTD.DIRCLR = PIN_PW_2; // input sensor 3
-    PORTB.DIRSET = PIN_PWM; // Set pwm pin as output
     SYSTEM_Initialize();
 
+
     while (1) {
+        int min_index = sensor_logic(distance_cm, size);
+
         for (int i = 0; i < 3; i++) {
             if (i == 0) {
                 PORTD.DIRCLR = PIN_PW; // Enable sensor 1 as input
                 PORTD.DIRSET = PIN_PW_1; // Set sensor 2 as output
                 PORTD.DIRSET = PIN_PW_2; // Set sensor 3 as output
+                if (0 == min_index) {
+                    PORTB.DIRSET = PIN_PWM;
+                } else {
+                    PORTB.DIRCLR = PIN_PWM;
+                }
             } else if (i == 1) {
                 PORTD.DIRCLR = PIN_PW_1; // Enable sensor 2 as input
                 PORTD.DIRSET = PIN_PW; // Set sensor 1 as output
                 PORTD.DIRSET = PIN_PW_2; // Set sensor 3 as output
+                if (1 == min_index) {
+                    PORTB.DIRSET = PIN_PWM_1;
+                } else {
+                    PORTB.DIRCLR = PIN_PWM_1;
+                }
             } else if (i == 2) {
                 PORTD.DIRCLR = PIN_PW_2; // Enable sensor 3 as input
                 PORTD.DIRSET = PIN_PW; // Set sensor 1 as output
                 PORTD.DIRSET = PIN_PW_1; // Set sensor 2 as output
+                if (2 == min_index) {
+                    PORTB.DIRSET = PIN_PWM_2;
+                } else {
+                    PORTB.DIRCLR = PIN_PWM_2;
+                }
             }
             _delay_ms(10);
 
@@ -75,14 +97,13 @@ int main(void) {
         calculate_distance(adc_result, distance_cm);
         map_distance_to_duty_cycle(distance_cm, duty_cycle);
 
+
         //printf("Distance1 : %.2f \r\n", distance_cm[0]);
-        printf("Duty_cycle1: %u \r\n", duty_cycle[1]);
+        printf("Duty_cycle1: %u \r\n", duty_cycle[0]);
         //printf("sum1: %.2f \r\n", adc_result_flat[0]);
         //printf("sum1: %.2f \r\n", adc_result_flat[1]);
 
     }
-
-
 }
 
 void circular_buffer_write(circular_buffer_t *c, int16_t data, int8_t buffer_number) {
@@ -180,4 +201,16 @@ void map_distance_to_duty_cycle(float distance_cm[], uint8_t duty_cycle[]) {
             duty_cycle[i] = 100;
         }
     }
+}
+
+int sensor_logic(float distance_cm[3], int size) {
+
+    int min_index = 0; // Start with the first element's index as the largest
+
+    for (int i = 1; i < size; i++) {
+        if (distance_cm[i] < distance_cm[min_index]) {
+            min_index = i; // Update max_index if current element is larger
+        }
+    }
+    return min_index;
 }
