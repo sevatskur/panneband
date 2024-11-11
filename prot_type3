@@ -17,6 +17,7 @@ uint16_t adc_result[3]; // array to store data for each sensor
 float adc_result_flat[3];
 float distance_cm[3]; // array for 3 different distances
 int adc_pins[3] = {ADC0_IO_PD0, ADC0_IO_PD1, ADC0_IO_PD2}; // Distance sensor pins
+uint8_t duty_cycle[3]; //distance to pwm array
 
 typedef struct {
     int16_t * const buffer1; // buffer 1
@@ -29,12 +30,11 @@ typedef struct {
     unsigned writeIndex3;
 } circular_buffer_t;
 
-
-float calculate_distance(uint16_t adc_value);
 void circular_buffer_write(circular_buffer_t *c, int16_t data, int8_t buffer_number);
 int16_t circular_buffer_read(circular_buffer_t *c, unsigned Xn, int8_t buffer_number);
 int32_t accumolator(int16_t sample, int8_t buffer_number);
-uint8_t map_distance_to_duty_cycle(uint16_t distance);
+void calculate_distance(uint16_t adc_result_flat[3], float distance[3]);
+void map_distance_to_duty_cycle(float distance_cm[], uint8_t duty_cycle[]);
 
 int main(void) {
     // Initial setup
@@ -72,10 +72,14 @@ int main(void) {
             _delay_ms(1); // Delay to allow settling before next conversion
         }
 
-        // Print all results for debugging
-        printf("sum1: %.2f \r\n", adc_result_flat[0]);
-        printf("sum1: %.2f \r\n", adc_result_flat[1]);
-        
+        calculate_distance(adc_result, distance_cm);
+        map_distance_to_duty_cycle(distance_cm, duty_cycle);
+
+        //printf("Distance1 : %.2f \r\n", distance_cm[0]);
+        printf("Duty_cycle1: %u \r\n", duty_cycle[1]);
+        //printf("sum1: %.2f \r\n", adc_result_flat[0]);
+        //printf("sum1: %.2f \r\n", adc_result_flat[1]);
+
     }
 
 
@@ -157,21 +161,23 @@ int32_t accumolator(int16_t sample, int8_t buffer_number) {
     return sum[buffer_number] / CIRCULAR_BUFFER_SIZE;
 }
 
-float calculate_distance(uint16_t adc_value) {
-    float distance = adc_value * 0.107; // scaling factor tested irl
-    //printf("Distance: %.2f cm\r\n", distance);
-
-    return distance;
+void calculate_distance(uint16_t adc_result_flat[], float distance[3]) {
+    for (int i = 0; i < 3; i++) {
+        distance[i] = adc_result_flat[i] * 0.107; // scaling factor tested irl
+    }
 }
 
-uint8_t map_distance_to_duty_cycle(uint16_t distance) {
+void map_distance_to_duty_cycle(float distance_cm[], uint8_t duty_cycle[]) {
     uint16_t max_distance = 300; // chosen max distance
-    uint8_t duty_cycle = 100 - (distance * 100 / max_distance);
 
-    // Corrected clamping for the duty cycle range
-    if (duty_cycle > 100) duty_cycle = 0;
-    else if (duty_cycle < 0) duty_cycle = 100;
+    for (int i = 0; i < 3; i++) {
+        duty_cycle[i] = 100 - (distance_cm[i] * 100 / max_distance);
 
-    //printf("Duty_cycle: %u\r\n", duty_cycle);
-    return duty_cycle;
+        // Clamp the duty cycle within the 0-100 range
+        if (duty_cycle[i] > 100) {
+            duty_cycle[i] = 0;
+        } else if (duty_cycle[i] < 0) {
+            duty_cycle[i] = 100;
+        }
+    }
 }
