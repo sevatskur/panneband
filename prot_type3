@@ -5,6 +5,7 @@
 #include <util/delay.h>
 #include <stdio.h>
 
+#define PIN_RX (1 << 0)   //En udefinert pin som skal brukes til RXen til sensoren
 #define PIN_PW (1 << 0)   // PD0 for pw pin
 #define PIN_PW_1 (1 << 1) // PD1 for pw pin 
 #define PIN_PW_2 (1 << 2)
@@ -40,6 +41,7 @@ int16_t circular_buffer_read(circular_buffer_t *c, unsigned Xn, int8_t buffer_nu
 int32_t accumolator(int16_t sample, int8_t buffer_number);
 void calculate_distance(uint16_t adc_result_flat[3], float distance[3]);
 void map_distance_to_duty_cycle(float distance_cm[], uint8_t duty_cycle[]);
+void sensor_timing();
 
 int main(void) {
     // Initial setup
@@ -213,4 +215,15 @@ int sensor_logic(float distance_cm[3], int size) {
         }
     }
     return min_index;
+}
+
+
+////////// Suedo kode for pulstog, se sensor datasheet side 5 for mere detaljer ///////////
+void sensor_timing(){
+    static int32_t timer = 0;
+    if(timer >= 50){ //i ms
+        //Sett pin RX høy i 2 ms
+        timer = 0; //resett timer
+    }
+    
 }
