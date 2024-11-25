@@ -11,6 +11,7 @@
 #define PIN_PWM (1 << 0)  // PB0 for vibration motor
 #define PIN_PWM_1 (1 << 1)
 #define PIN_PWM_2 (1 << 2)
+#define START_PIN (1 << 5)
 #define PERIOD 0x9c3      // pwm variable
 #define N 4               // For 2^N
 #define CIRCULAR_BUFFER_SIZE (1 << N) //Gir bufferstørrelse 2^N
@@ -42,7 +43,12 @@ int find_min_index(float array[], int size);
 int main(void) {
     SYSTEM_Initialize();
 
+    PORTC.DIRSET = START_PIN;
+    _delay_ms(40);
+    PORTC.DIRCLR = START_PIN;
+
     while (1) {
+
         for (int i = 0; i < 3; i++) {
 
             adc_result[i] = adc_switch_and_read(i); // adc result for each pin
@@ -59,12 +65,14 @@ int main(void) {
         for (int i = 0; i < 3; i++) {
             if (i != min_index) {
                 duty_cycle[i] = 0;
-            } 
-            _delay_ms(10);
+            }
         }
-        printf("Duty1 : %u \r\n", duty_cycle[0]);
-        printf("Duty2 : %u \r\n", duty_cycle[1]);
-        printf("Duty3 : %u \r\n", duty_cycle[2]);
+        //printf("Duty1 : %u \r\n", duty_cycle[0]);
+        //printf("Duty2 : %u \r\n", duty_cycle[1]);
+        //printf("Duty3 : %u \r\n", duty_cycle[2]);
+        printf("dist1 : %.2f \r\n", adc_result_flat[0]);
+        printf("dist2 : %.2f \r\n", adc_result_flat[1]);
+        printf("dist3 : %.2f \r\n", adc_result_flat[2]);
     }
 }
 
@@ -146,18 +154,9 @@ int32_t accumolator(int16_t sample, int8_t buffer_number) {
 
 int16_t adc_switch_and_read(int pin_index) {
 
-    int8_t pins[] = {PIN_PW, PIN_PW_1, PIN_PW_2};
-
     ADC0.MUXPOS = adc_pins[pin_index];
+    //_delay_ms(48); // to avoid interferance between channels
 
-    for (int i = 0; i < 3; i++) {
-        if (i == pin_index) {
-            PORTD.DIRCLR = pins[i];
-        } else {
-            PORTD.DIRSET = pins[i];
-        }
-    }
-    _delay_ms(48); // to avoid interferance between channels
 
     // Start ADC conversion
     ADC0.COMMAND = ADC_STCONV_bm;
