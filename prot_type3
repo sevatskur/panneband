@@ -2,6 +2,8 @@
 #include "mcc_generated_files/system/pins.h" 
 #include "mcc_generated_files/vref/vref.h"
 #include <avr/io.h>
+#include <avr/sleep.h>
+#include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdio.h>
 
@@ -43,7 +45,6 @@ int find_min_index(float array[], int size);
 int main(void) {
     SYSTEM_Initialize();
 
-    PORTC.DIRSET = START_PIN;
     _delay_ms(40);
     PORTC.DIRCLR = START_PIN;
 
@@ -62,14 +63,26 @@ int main(void) {
 
         int min_index = find_min_index(adc_result_flat, 3); // finds the sensor thats closest to an object
 
-        for (int i = 0; i < 3; i++) {
-            if (i != min_index) {
+        for (int i = 0; i < 3; i++) { //vibrates the one thats closest to an object
+            if(i == min_index){
+                if(i == 0){ 
+                    TCA1.SINGLE.CMP0 = (PERIOD * duty_cycle[0]) / 100;
+                }
+                else if(i == 1){
+                    TCA1.SINGLE.CMP1 = (PERIOD * duty_cycle[1]) / 100;
+                }
+                else if(i == 2){
+                    TCA1.SINGLE.CMP2 = (PERIOD * duty_cycle[2]) / 100;
+                }
+            }
+            else{
                 duty_cycle[i] = 0;
             }
         }
-        //printf("Duty1 : %u \r\n", duty_cycle[0]);
-        //printf("Duty2 : %u \r\n", duty_cycle[1]);
-        //printf("Duty3 : %u \r\n", duty_cycle[2]);
+
+        /*printf("Duty1 : %u \r\n", duty_cycle[0]);
+        printf("Duty2 : %u \r\n", duty_cycle[1]);
+        printf("Duty3 : %u \r\n", duty_cycle[2]);*/
         printf("dist1 : %.2f \r\n", adc_result_flat[0]);
         printf("dist2 : %.2f \r\n", adc_result_flat[1]);
         printf("dist3 : %.2f \r\n", adc_result_flat[2]);
@@ -197,4 +210,3 @@ int find_min_index(float array[], int size) {
     }
     return min_index; // Returner indeksen til den minste verdien
 }
-
