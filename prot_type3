@@ -57,15 +57,14 @@ int main(void) {
         int min_index = find_min_index(adc_result_flat, 3); // finds the sensor thats closest to an object
 
         for (int i = 0; i < 3; i++) {
-            if (i == min_index) {
-                ADC0.MUXPOS = adc_pins[i];
-            } else {
-                ADC0.MUXPOS = 0x00;
-            }
+            if (i != min_index) {
+                duty_cycle[i] = 0;
+            } 
+            _delay_ms(10);
         }
-        _delay_ms(10);
         printf("Duty1 : %u \r\n", duty_cycle[0]);
         printf("Duty2 : %u \r\n", duty_cycle[1]);
+        printf("Duty3 : %u \r\n", duty_cycle[2]);
     }
 }
 
