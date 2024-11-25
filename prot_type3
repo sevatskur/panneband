@@ -2,8 +2,6 @@
 #include "mcc_generated_files/system/pins.h" 
 #include "mcc_generated_files/vref/vref.h"
 #include <avr/io.h>
-#include <avr/sleep.h>
-#include <avr/interrupt.h>
 #include <util/delay.h>
 #include <stdio.h>
 
