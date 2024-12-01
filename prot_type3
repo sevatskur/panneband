@@ -1,3 +1,4 @@
+// Includes all necessary and MCC created libraries
 #include "mcc_generated_files/system/system.h"
 #include "mcc_generated_files/system/pins.h" 
 #include "mcc_generated_files/vref/vref.h"
@@ -5,90 +6,90 @@
 #include <util/delay.h>
 #include <stdio.h>
 
-#define PIN_PW (1 << 0)   // PD0 for pw pin
-#define PIN_PW_1 (1 << 1) // PD1 for pw pin 
-#define PIN_PW_2 (1 << 2)
-#define PIN_PWM (1 << 0)  // PB0 for vibration motor
-#define PIN_PWM_1 (1 << 1)
-#define PIN_PWM_2 (1 << 2)
-#define START_PIN (1 << 5)
-#define PERIOD 0x9c3      // pwm variable
-#define N 4               // For 2^N
-#define CIRCULAR_BUFFER_SIZE (1 << N) //Gir bufferstørrelse 2^N
+#define PIN_PW (1 << 0)    // PD0 for distance sensor 1
+#define PIN_PW_1 (1 << 1)  // PD1 for distance sensor 2
+#define PIN_PW_2 (1 << 2)  // PD2 for distnace sensor 3
+#define PIN_PWM (1 << 4)   // PC4 for vibration motor 1
+#define PIN_PWM_1 (1 << 5) // PC5 for vibration motor 2
+#define PIN_PWM_2 (1 << 6) // PC6 for vibration motor 3
+#define START_PIN (1 << 2) // PB2 for startup 
+#define PERIOD 0x9c3       // Max pwm value
+#define N 4                // For 2^N
+#define CIRCULAR_BUFFER_SIZE (1 << N) //buffersize 2^N
 
-uint16_t adc_result[3]; // array to store data for each sensor
-float adc_result_flat[3]; //average adc values after being filtered
-float distance_cm[3]; // array for 3 different distances
+uint16_t adc_result[3];          // array to store raw adc data for each sensor
+float adc_result_flat[3];        // average adc values after being filtered
+float distance_cm[3];            // array for 3 different distances
 int adc_pins[3] = {ADC0_IO_PD0, ADC0_IO_PD1, ADC0_IO_PD2}; // Distance sensor pins
-uint8_t duty_cycle[3]; //distance to pwm array
+float duty_cycle[3];             // distance to pwm array
+float distance_variable = 0.150; // tested irl 
 
 typedef struct {
-    int16_t * const buffer1; // buffer 1
-    unsigned writeIndex1; // write index to buffer 1
+    int16_t * const buffer1; // Buffer 1
+    unsigned writeIndex1;    // Write index for buffer 1
 
-    int16_t * const buffer2;
-    unsigned writeIndex2;
+    int16_t * const buffer2; // Buffer 2
+    unsigned writeIndex2;    // Write index for buffer 2
 
-    int16_t * const buffer3;
-    unsigned writeIndex3;
+    int16_t * const buffer3; // Buffer 3
+    unsigned writeIndex3;    // Write index for buffer 3
 } circular_buffer_t;
 
+// Initialize functions before main loop
 void circular_buffer_write(circular_buffer_t *c, int16_t data, int8_t buffer_number);
 int16_t circular_buffer_read(circular_buffer_t *c, unsigned Xn, int8_t buffer_number);
 int32_t accumolator(int16_t sample, int8_t buffer_number);
-uint8_t map_distance_to_duty_cycle(float distance_cm);
+float map_distance_to_duty_cycle(float distance_cm);
 int16_t adc_switch_and_read(int pin_index);
 int find_min_index(float array[], int size);
 
 int main(void) {
-    SYSTEM_Initialize();
+    //Pins are initialized in MCC
+    SYSTEM_Initialize(); 
 
     startup(); //Used to indicate system startup
-    _delay_ms(40);
-    PORTC.DIRCLR = START_PIN; //used to activate sensors 
 
-    PORTB.DIRSET = PIN_PWM;
-    PORTB.DIRSET = PIN_PWM_1;
-    PORTB.DIRSET = PIN_PWM_2;
+    _delay_ms(48);
+    PORTB.DIRCLR = START_PIN; //Disabled after 48ms to start sensors
 
     while (1) {
 
         for (int i = 0; i < 3; i++) {
 
-            adc_result[i] = adc_switch_and_read(i); // adc result for each pin
+            adc_result[i] = adc_switch_and_read(i); // Raw adc data for each sensor
 
-            adc_result_flat[i] = accumolator(adc_result[i], i); // filtered result
+            adc_result_flat[i] = accumolator(adc_result[i], i); // Filtered adc data for each sensor
 
-            distance_cm[i] = (float) adc_result_flat[i] * 0.150; // distance for each pin
+            distance_cm[i] = (float) adc_result_flat[i] * distance_variable; // Distance for each pin
 
-            duty_cycle[i] = map_distance_to_duty_cycle(distance_cm[i]); //duty cycle to set pwm          
+            duty_cycle[i] = map_distance_to_duty_cycle((uint16_t) distance_cm[i]); //Duty cycle to set pwm          
         }
+        int min_index = find_min_index(adc_result_flat, 3); // Finds the sensor thats closest to an object
 
-        int min_index = find_min_index(adc_result_flat, 3); // finds the sensor thats closest to an object
-
-        for (int i = 0; i < 3; i++) { //vibrates the one thats closest to an object
+        for (int i = 0; i < 3; i++) { //Vibrates the one thats closest to an object
             if (i == min_index) {
                 if (i == 0) {
-                    TCA1.SINGLE.CMP0 = (PERIOD * duty_cycle[0]) / 100;
+                    TCA1.SINGLE.CMP0 = (float) (PERIOD * duty_cycle[0]);
+                    TCA1.SINGLE.CMP1 = 0;
+                    TCA1.SINGLE.CMP2 = 0;
                 } else if (i == 1) {
-                    TCA1.SINGLE.CMP1 = (PERIOD * duty_cycle[1]) / 100;
+                    TCA1.SINGLE.CMP1 = (float) (PERIOD * duty_cycle[1]);
+                    TCA1.SINGLE.CMP0 = 0;
+                    TCA1.SINGLE.CMP2 = 0;
                 } else if (i == 2) {
-                    TCA1.SINGLE.CMP2 = (PERIOD * duty_cycle[2]) / 100;
+                    TCA1.SINGLE.CMP2 = (float) (PERIOD * duty_cycle[2]);
+                    TCA1.SINGLE.CMP0 = 0;
+                    TCA1.SINGLE.CMP1 = 0;
                 }
-            } else {
-                duty_cycle[i] = 0;
             }
         }
-
-        /*printf("Duty1 : %u \r\n", duty_cycle[0]);
-        printf("Duty2 : %u \r\n", duty_cycle[1]);
-        printf("Duty3 : %u \r\n", duty_cycle[2]);*/
-        printf("dist1 : %.2f \r\n", adc_result[0]);
-        printf("dist2 : %.2f \r\n", adc_result[1]);
-        printf("dist3 : %.2f \r\n", adc_result[2]);
+        printf("dist1 : %u \r\n", adc_result[0]);
+        printf("dist2 : %u \r\n", adc_result[1]);
+        printf("dist3 : %u \r\n", adc_result[2]);
     }
 }
 
+// Writes sensor data for each sensor
 void circular_buffer_write(circular_buffer_t *c, int16_t data, int8_t buffer_number) {
     if (buffer_number == 0) {
         c -> buffer1[c->writeIndex1] = data;
@@ -103,6 +104,7 @@ void circular_buffer_write(circular_buffer_t *c, int16_t data, int8_t buffer_num
     }
 }
 
+// Reads buffer data for each sensor
 int16_t circular_buffer_read(circular_buffer_t *c, unsigned Xn, int8_t buffer_number) {
     if (buffer_number == 0) {
         return c->buffer1[(c->writeIndex1 - Xn + CIRCULAR_BUFFER_SIZE - 1) % CIRCULAR_BUFFER_SIZE];
@@ -116,31 +118,31 @@ int16_t circular_buffer_read(circular_buffer_t *c, unsigned Xn, int8_t buffer_nu
 }
 
 int32_t accumolator(int16_t sample, int8_t buffer_number) {
-    //Deklarerer en ringbuffer med dataområde gitt av CIRCULAR_BUFFER_SIZE
+    // Declares a ringbuffer with dataspace given by CIRCULAR_BUFFER_SIZE variable
     static int16_t bufferDataSpace1[CIRCULAR_BUFFER_SIZE];
     static int16_t bufferDataSpace2[CIRCULAR_BUFFER_SIZE];
     static int16_t bufferDataSpace3[CIRCULAR_BUFFER_SIZE];
     static int32_t sum[3] = {0};
 
     static circular_buffer_t c = {
-        .buffer1 = bufferDataSpace1,
-        .buffer2 = bufferDataSpace2,
-        .buffer3 = bufferDataSpace3,
+        .buffer1 = bufferDataSpace1, // For sensor 1
+        .buffer2 = bufferDataSpace2, // For sensor 2
+        .buffer3 = bufferDataSpace3, // For sensor 3
         .writeIndex1 = 0,
         .writeIndex2 = 0,
         .writeIndex3 = 0
     };
-    //skriver til ringbufffer
+    // Writes to ringbuffer
     circular_buffer_write(&c, sample, buffer_number);
 
     static int16_t counter[] = {0, 0, 0}; // counter elements 0, 1 and 2
 
-    //Sjekker om ringbufferen har blitt lagt sammen en gang
+    // Checks if ringbuffer has been filled 
     if (counter[buffer_number] >= CIRCULAR_BUFFER_SIZE) {
-        //trekker fra edlste verdi og legger deretter på nyeste verdi
+        // Deducts the oldest sample whilst adding a new
         sum[buffer_number] -= circular_buffer_read(&c, CIRCULAR_BUFFER_SIZE - 1, buffer_number);
         sum[buffer_number] += circular_buffer_read(&c, 0, buffer_number);
-    }//legger sammen alle verdiene i ringbufferen ved første gjennomkjøring
+    }   // Sums all values in the ringbuffer 
     else {
         if (buffer_number == 0) {
             for (uint16_t n = 0; n < CIRCULAR_BUFFER_SIZE; n++) {
@@ -161,48 +163,42 @@ int32_t accumolator(int16_t sample, int8_t buffer_number) {
         }
         counter[buffer_number] = CIRCULAR_BUFFER_SIZE;
     }
-    //printf("sum1 = %u \r\n", sum[1]/CIRCULAR_BUFFER_SIZE);
     return sum[buffer_number] / CIRCULAR_BUFFER_SIZE;
 }
 
 int16_t adc_switch_and_read(int pin_index) {
 
-    ADC0.MUXPOS = adc_pins[pin_index];
-    //_delay_ms(48); // to avoid interferance between channels
+    ADC0.MUXPOS = adc_pins[pin_index];       // Starts ADC on the chosen pin
 
-    // Start ADC conversion
-    ADC0.COMMAND = ADC_STCONV_bm;
+    ADC0.COMMAND = ADC_STCONV_bm;            // Start ADC conversion
 
-    // Wait for conversion to complete
-    while (!(ADC0.INTFLAGS & ADC_RESRDY_bm));
+    while (!(ADC0.INTFLAGS & ADC_RESRDY_bm));// Wait for conversion to complete
 
-    // Clear the result-ready flag
-    ADC0.INTFLAGS = ADC_RESRDY_bm;
+    ADC0.INTFLAGS = ADC_RESRDY_bm;           // Clear the result-ready flag
 
-    // Return ADC result
-    return ADC0.RES;
+    return ADC0.RES;                         // Return ADC result
 }
 
-uint8_t map_distance_to_duty_cycle(float distance_cm) {
-    uint16_t max_distance = 300; // Maks avstand for duty cycle
-    int16_t duty_cycle = 100 - (distance_cm * 100 / max_distance);
+float map_distance_to_duty_cycle(float distance_cm) {
+    uint16_t max_distance = 250; // Chosen max distance 
+    int16_t duty_cycle = 100 - (distance_cm * 100 / max_distance); // Map function 
 
-    // Begrens duty cycle til området 0-100
+    // Restricts duty cycle from 0-100
     if (duty_cycle > 100) {
         duty_cycle = 100;
     } else if (duty_cycle < 0) {
         duty_cycle = 0;
     }
 
-    return duty_cycle;
+    return ((float) duty_cycle / 100); // Returns a float(Important))
 }
 
 int find_min_index(float array[], int size) {
-    int min_index = 0; // Start med første element som minste
+    int min_index = 0; // Variable to store the smallest value
     float min_value = array[0];
 
-    for (int i = 1; i < size; i++) { // Sjekk resten av arrayen
-        if (array[i] < min_value) { // Oppdater hvis vi finner en mindre verdi
+    for (int i = 1; i < size; i++) { // Checks through the array
+        if (array[i] < min_value) { //  Updates min_index with the new "smallest value"
             min_value = array[i];
             min_index = i;
         }
@@ -210,7 +206,7 @@ int find_min_index(float array[], int size) {
     return min_index; // Returner indeksen til den minste verdien
 }
 
-void startup() {
+void startup() { // To indicate that the power is on
 
     for (int i = 0; i < 3; i++) {
         if (i == 0) {
@@ -220,6 +216,6 @@ void startup() {
         } else if (i == 2) {
             TCA1.SINGLE.CMP2 = PERIOD;
         }
-        _delay_ms(50);
+        _delay_ms(500);
     }
 }
