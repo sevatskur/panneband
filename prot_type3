@@ -1,3 +1,12 @@
+// The code implements a proximity detection system for a Proximity Headband that is designed to enhance spatial awareness for visually impaired individuals.
+
+/* This is the main.c file which utilizes the created MCC libraries etc. from the MPLABX IDE.
+    The code uses ADC values from distance sensor readings, and uses these to set different PWM-signals to the outputs.
+    To smooth out the raw ADC data, an accumulator function is used to find the average value over several readings.
+    The distance is then mapped to the PWM values for a smoother conversion.
+*/
+
+
 // Includes all necessary and MCC created libraries
 #include "mcc_generated_files/system/system.h"
 #include "mcc_generated_files/system/pins.h" 
